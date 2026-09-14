@@ -959,6 +959,103 @@ export function capturePod(input: {
   return { ok: true, id: podId };
 }
 
+export function reviewAndApprovePod(input: {
+  bookingId: string;
+  actor: string;
+  receiverName?: string;
+  remarks?: string;
+  imageUrl?: string;
+}): ActionResult {
+  const d = getDb();
+  const b = byId(d.bookings, input.bookingId);
+  if (!b) return { ok: false, reason: "Booking not found." };
+
+  let pod = d.pods.find((p) => p.bookingId === b.id);
+  const trip = b.tripId ? byId(d.trips, b.tripId) : undefined;
+
+  if (!pod) {
+    const podId = nid("pod");
+    pod = {
+      id: podId,
+      tripId: trip?.id || `tr_${b.id}`,
+      bookingId: b.id,
+      receiverName: input.receiverName || "Warehouse In-charge",
+      signatureSeed: `${b.ref}-approved-sig`,
+      photoNote: input.remarks || "Physical POD verified and stamped at destination bay.",
+      otp: "849201",
+      capturedISO: now(),
+      verified: true,
+      imageUrl: input.imageUrl,
+      reviewedBy: input.actor,
+      reviewedISO: now(),
+      status: "approved",
+    };
+    d.pods.unshift(pod);
+    if (trip) trip.podId = podId;
+  } else {
+    pod.verified = true;
+    pod.reviewedBy = input.actor;
+    pod.reviewedISO = now();
+    pod.status = "approved";
+    if (input.receiverName) pod.receiverName = input.receiverName;
+    if (input.remarks) pod.photoNote = input.remarks;
+    if (input.imageUrl) pod.imageUrl = input.imageUrl;
+  }
+
+  setBookingStatus(b.id, "pod_received", input.actor);
+
+  if (trip && trip.status !== "completed") {
+    tripTransition(trip.id, "pod_uploaded", input.actor);
+    tripTransition(trip.id, "completed", "System");
+  }
+
+  audit(input.actor, `POD reviewed and marked received for ${b.ref}`, "booking", b.id);
+
+  const client = byId(d.clients, b.clientId);
+  notify({
+    event: "POD_AVAILABLE",
+    channel: "whatsapp",
+    recipient: client?.phone || "919876543210",
+    recipientRole: "client",
+    body: `POD for ${b.ref} has been reviewed and verified. Ready for invoice generation.`,
+    link: `/portal/pod/${b.id}`,
+    entityRef: b.ref,
+  });
+
+  return { ok: true, id: pod.id };
+}
+
+export function rejectPod(input: {
+  bookingId: string;
+  actor: string;
+  reason: string;
+}): ActionResult {
+  const d = getDb();
+  const b = byId(d.bookings, input.bookingId);
+  if (!b) return { ok: false, reason: "Booking not found." };
+  const pod = d.pods.find((p) => p.bookingId === b.id);
+  if (pod) {
+    pod.verified = false;
+    pod.status = "rejected";
+    pod.reviewedBy = input.actor;
+    pod.reviewedISO = now();
+    pod.photoNote = `REJECTED: ${input.reason}`;
+  }
+  setBookingStatus(b.id, "pod_pending", input.actor);
+  audit(input.actor, `POD rejected for ${b.ref}: ${input.reason}`, "booking", b.id);
+  const client = byId(d.clients, b.clientId);
+  notify({
+    event: "POD_REJECTED",
+    channel: "whatsapp",
+    recipient: client?.phone || "919876543210",
+    recipientRole: "client",
+    body: `POD for ${b.ref} was rejected: ${input.reason}. Please re-upload legible proof.`,
+    link: `/app/pod`,
+    entityRef: b.ref,
+  });
+  return { ok: true };
+}
+
 export function invoiceEligibility(bookingId: string): GuardResult {
   const d = getDb();
   const b = byId(d.bookings, bookingId);
