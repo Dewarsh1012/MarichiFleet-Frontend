@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Plus, Navigation, ArrowRight, Trash2, MapPin, Clock, IndianRupee, Layers, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
@@ -160,13 +160,20 @@ function RoutesPage() {
         title="Routes & Corridors"
         subtitle="Standard transport corridors with pre-calculated distances, transit schedules, and benchmark pricing."
         actions={
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="gap-2">
-                <Plus className="size-4" />
-                <span>Create Route</span>
-              </Button>
-            </DialogTrigger>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/app/bookings/new">
+                <Plus className="size-4 mr-1.5" />
+                <span>Create Booking</span>
+              </Link>
+            </Button>
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="gap-2">
+                  <Plus className="size-4" />
+                  <span>Create Route</span>
+                </Button>
+              </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <form onSubmit={handleCreateRoute}>
                 <DialogHeader>
@@ -285,8 +292,9 @@ function RoutesPage() {
               </form>
             </DialogContent>
           </Dialog>
-        }
-      />
+        </div>
+      }
+    />
 
       {/* KPI Ribbon */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-4">
@@ -314,6 +322,7 @@ function RoutesPage() {
         emptyTitle="No corridors configured"
         emptyMessage="Create standard freight corridors to standardize dispatch schedules, pricing and automated booking entries."
         emptyAction={{ label: "Create Route", onAction: () => setDialogOpen(true) }}
+        onRowClick={(r) => navigate({ to: "/app/bookings/new", search: { routeId: r.id } })}
         columns={[
           {
             key: "code",
@@ -380,10 +389,12 @@ function RoutesPage() {
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs gap-1 border-primary/40 text-primary hover:bg-primary/10"
-                  onClick={() => navigate({ to: "/app/bookings/new", search: { routeId: r.id } as any })}
+                  asChild
                 >
-                  <span>Create Booking</span>
-                  <ExternalLink className="size-3" />
+                  <Link to="/app/bookings/new" search={{ routeId: r.id }}>
+                    <span>Create Booking</span>
+                    <ExternalLink className="size-3" />
+                  </Link>
                 </Button>
                 <Button
                   size="icon"

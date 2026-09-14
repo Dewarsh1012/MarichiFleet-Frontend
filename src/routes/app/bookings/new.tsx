@@ -15,6 +15,9 @@ import { createBooking } from "@/domain/store";
 import type { Vehicle, TransportRoute } from "@/domain/types";
 
 export const Route = createFileRoute("/app/bookings/new")({
+  validateSearch: (search: Record<string, unknown>): { routeId?: string } => ({
+    routeId: typeof search.routeId === "string" ? search.routeId : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "New booking — MarichiFleet" },
@@ -32,20 +35,23 @@ function NewBooking() {
   const run = useAction();
   const navigate = useNavigate();
   const { persona } = useSession();
-  const search = useSearch({ strict: false }) as { routeId?: string };
+  const search = Route.useSearch();
+  const searchRouteId = search?.routeId;
 
-  const [routeId, setRouteId] = useState<string>(search?.routeId || "");
+  const routes = db.routes || [];
+  const initialRoute = searchRouteId ? routes.find((r) => r.id === searchRouteId) : undefined;
+
+  const [routeId, setRouteId] = useState<string>(searchRouteId || "");
   const [clientId, setClientId] = useState(db.clients[0]?.id ?? "");
-  const [from, setFrom] = useState("Pune");
-  const [to, setTo] = useState("Hyderabad");
+  const [from, setFrom] = useState(initialRoute ? initialRoute.originCity : "Pune");
+  const [to, setTo] = useState(initialRoute ? initialRoute.destinationCity : "Hyderabad");
   const [cargo, setCargo] = useState("");
   const [weight, setWeight] = useState("12");
   const [type, setType] = useState<Vehicle["type"]>("Truck");
   const [priority, setPriority] = useState<"standard" | "express" | "critical">("standard");
-  const [rate, setRate] = useState("48000");
+  const [rate, setRate] = useState(initialRoute ? String(initialRoute.defaultRate) : "48000");
   const [pickup, setPickup] = useState(new Date(Date.now() + 86400_000).toISOString().slice(0, 16));
 
-  const routes = db.routes || [];
   const selectedRoute = routes.find((r) => r.id === routeId);
 
   const availableCities = useMemo(() => {
@@ -61,8 +67,8 @@ function NewBooking() {
 
   // Auto-apply route from URL if present
   useEffect(() => {
-    if (search?.routeId && routes.length > 0) {
-      const found = routes.find((r) => r.id === search.routeId);
+    if (searchRouteId && routes.length > 0) {
+      const found = routes.find((r) => r.id === searchRouteId);
       if (found) {
         setRouteId(found.id);
         setFrom(found.originCity);
@@ -70,7 +76,7 @@ function NewBooking() {
         setRate(String(found.defaultRate));
       }
     }
-  }, [search?.routeId, routes]);
+  }, [searchRouteId, routes]);
 
   const handleRouteChange = (val: string) => {
     setRouteId(val);
