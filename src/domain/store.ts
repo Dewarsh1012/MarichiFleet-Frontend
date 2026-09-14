@@ -830,31 +830,75 @@ export function advanceJobCard(
 }
 
 export function markDelivered(tripId: string, actor: string): ActionResult {
+  return markVehicleDelivered(tripId, actor);
+}
+
+export function markVehicleDelivered(bookingOrTripId: string, actor: string): ActionResult {
   const d = getDb();
-  const t = byId(d.trips, tripId);
-  if (!t) return { ok: false, reason: "Trip not found." };
-  if (t.status === "in_transit" || t.status === "exception") {
-    if (t.checkpoints.some((c) => !c.doneISO))
-      return { ok: false, reason: "All checkpoints must be completed before delivery." };
-    t.status = "arrived";
+  let booking = d.bookings.find((b) => b.id === bookingOrTripId);
+  let trip = booking?.tripId ? byId(d.trips, booking.tripId) : byId(d.trips, bookingOrTripId);
+
+  if (!trip && !booking) {
+    return { ok: false, reason: "Booking or trip not found." };
   }
-  const res = tripTransition(tripId, "delivered", actor);
-  if (!res.ok) return res;
-  t.deliveredISO = now();
-  t.progress = 1;
-  const b = byId(d.bookings, t.bookingId)!;
-  if (b.status === "in_transit") setBookingStatus(b.id, "delivered", "System");
-  if (b.status === "delivered") setBookingStatus(b.id, "pod_pending", "System");
-  notify({
-    event: "TRIP_DELIVERED",
-    channel: "whatsapp",
-    recipient: byId(d.clients, b.clientId)!.phone,
-    recipientRole: "client",
-    body: `Shipment ${b.ref} delivered at ${b.drop.city}. POD will follow shortly.`,
-    link: `/portal/bookings/${b.id}`,
-    entityRef: b.ref,
-  });
-  return res;
+
+  if (!booking && trip) {
+    booking = byId(d.bookings, trip.bookingId);
+  }
+
+  if (trip) {
+    // Complete all checkpoints
+    trip.checkpoints.forEach((c) => {
+      if (!c.doneISO) c.doneISO = now();
+    });
+    trip.status = "delivered";
+    trip.deliveredISO = now();
+    trip.progress = 1;
+
+    // Release vehicle
+    const vehicle = byId(d.vehicles, trip.vehicleId);
+    if (vehicle) {
+      vehicle.status = "available";
+      vehicle.currentTripId = undefined;
+      vehicle.speedKph = 0;
+      if (trip.route && trip.route.length > 0) {
+        const last = trip.route[trip.route.length - 1];
+        vehicle.lat = last.lat;
+        vehicle.lng = last.lng;
+      }
+      vehicle.lastPingISO = now();
+    }
+
+    // Release driver
+    const driver = byId(d.drivers, trip.driverId);
+    if (driver) {
+      driver.status = "available";
+      driver.assignedVehicleId = undefined;
+      driver.tripsCompleted = (driver.tripsCompleted || 0) + 1;
+    }
+
+    audit(actor, `Vehicle ${vehicle?.regNo || ""} marked delivered at destination`, "trip", trip.id, undefined, "Delivered");
+  }
+
+  if (booking) {
+    booking.status = "pod_pending";
+    audit(actor, "Shipment delivered at destination — POD pending", "booking", booking.id, undefined, "Delivered");
+
+    const client = byId(d.clients, booking.clientId);
+    if (client) {
+      notify({
+        event: "TRIP_DELIVERED",
+        channel: "whatsapp",
+        recipient: client.phone,
+        recipientRole: "client",
+        body: `Shipment ${booking.ref} delivered at ${booking.drop.city}. Vehicle has arrived. POD will follow shortly.`,
+        link: `/portal/tracking/${booking.id}`,
+        entityRef: booking.ref,
+      });
+    }
+  }
+
+  return { ok: true, id: trip?.id || booking?.id };
 }
 
 export function capturePod(input: {
