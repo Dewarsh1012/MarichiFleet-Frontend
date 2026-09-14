@@ -41,6 +41,17 @@ export async function loginWithGoogle(customProfile?: {
       body: JSON.stringify(profile),
     });
 
+    if (!res.ok) {
+      let errorMsg = `Server error (${res.status})`;
+      try {
+        const errData = await res.json();
+        errorMsg = errData?.error?.message || errorMsg;
+      } catch {
+        // Response was not JSON (e.g. HTML error page)
+      }
+      throw new Error(errorMsg);
+    }
+
     const data = await res.json();
     if (!data.success) {
       throw new Error(data.error?.message || 'Google authentication failed');
