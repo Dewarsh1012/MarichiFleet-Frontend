@@ -33,50 +33,62 @@ function RoutesPage() {
   const { persona } = useSession();
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [originCity, setOriginCity] = useState("Delhi NCR");
-  const [destinationCity, setDestinationCity] = useState("Mumbai");
+  const [originCity, setOriginCity] = useState("");
+  const [destinationCity, setDestinationCity] = useState("");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [distance, setDistance] = useState("1420");
-  const [transitHours, setTransitHours] = useState("36");
-  const [defaultRate, setDefaultRate] = useState("68000");
-  const [tollEstimate, setTollEstimate] = useState("4200");
+  const [distance, setDistance] = useState("");
+  const [transitHours, setTransitHours] = useState("");
+  const [defaultRate, setDefaultRate] = useState("");
+  const [tollEstimate, setTollEstimate] = useState("");
   const [stops, setStops] = useState("");
 
   const routes = db.routes || [];
 
-  // When origin or destination changes, calculate suggested distance and rate
   const handleOriginChange = (orig: string) => {
     setOriginCity(orig);
-    updateMetrics(orig, destinationCity);
+    if (!name || name.includes("→")) {
+      setName(orig && destinationCity ? `${orig} → ${destinationCity} Corridor` : "");
+    }
+    if (!code || code.startsWith("RT-")) {
+      const o = orig.slice(0, 3).toUpperCase();
+      const d = destinationCity.slice(0, 3).toUpperCase();
+      setCode(o && d ? `RT-${o}-${d}` : "");
+    }
   };
 
   const handleDestinationChange = (dest: string) => {
     setDestinationCity(dest);
-    updateMetrics(originCity, dest);
+    if (!name || name.includes("→")) {
+      setName(originCity && dest ? `${originCity} → ${dest} Corridor` : "");
+    }
+    if (!code || code.startsWith("RT-")) {
+      const o = originCity.slice(0, 3).toUpperCase();
+      const d = dest.slice(0, 3).toUpperCase();
+      setCode(o && d ? `RT-${o}-${d}` : "");
+    }
   };
 
-  const updateMetrics = (orig: string, dest: string) => {
-    const p1 = CITY_INDEX[orig];
-    const p2 = CITY_INDEX[dest];
-    if (p1 && p2 && orig !== dest) {
-      const d = Math.round(distanceKm(p1, p2) * 1.25); // Road factor ~1.25x great-circle
-      setDistance(String(d));
-      setTransitHours(String(Math.round((d / 40) * 10) / 10));
-      setDefaultRate(String(Math.round(d * 48)));
-      setTollEstimate(String(Math.round(d * 3)));
-      setCode(`RT-${orig.slice(0, 3).toUpperCase()}-${dest.slice(0, 3).toUpperCase()}`);
-      setName(`${orig} → ${dest} Express Corridor`);
+  const handleDistanceChange = (distVal: string) => {
+    setDistance(distVal);
+    const d = Number(distVal);
+    if (d > 0) {
+      if (!transitHours) setTransitHours(String(Math.round((d / 40) * 10) / 10));
+      if (!defaultRate) setDefaultRate(String(Math.round(d * 48)));
+      if (!tollEstimate) setTollEstimate(String(Math.round(d * 3)));
     }
   };
 
   const handleCreateRoute = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!originCity || !destinationCity) {
-      toast.error("Origin and Destination are required");
+    const orig = originCity.trim();
+    const dest = destinationCity.trim();
+
+    if (!orig || !dest) {
+      toast.error("Origin City and Destination City are required");
       return;
     }
-    if (originCity.toLowerCase() === destinationCity.toLowerCase()) {
+    if (orig.toLowerCase() === dest.toLowerCase()) {
       toast.error("Origin and Destination must be different cities");
       return;
     }
@@ -92,10 +104,10 @@ function RoutesPage() {
       : [];
 
     const res = createRoute({
-      name: name.trim() || `${originCity} → ${destinationCity} Corridor`,
-      code: code.trim().toUpperCase() || `RT-${originCity.slice(0, 3).toUpperCase()}-${destinationCity.slice(0, 3).toUpperCase()}`,
-      originCity,
-      destinationCity,
+      name: name.trim() || `${orig} → ${dest} Corridor`,
+      code: code.trim().toUpperCase() || `RT-${orig.slice(0, 3).toUpperCase()}-${dest.slice(0, 3).toUpperCase()}`,
+      originCity: orig,
+      destinationCity: dest,
       distanceKm: distNum,
       estTransitHours: Number(transitHours) || Math.round((distNum / 40) * 10) / 10,
       defaultRate: Number(defaultRate) || Math.round(distNum * 48),
@@ -106,11 +118,17 @@ function RoutesPage() {
 
     if (res.ok) {
       toast.success("Route Created Successfully", {
-        description: `Corridor ${originCity} → ${destinationCity} is now available for dispatch and booking selection.`,
+        description: `Corridor ${orig} → ${dest} (${distNum} km) is now saved and immediately available in booking dropdowns.`,
       });
       setDialogOpen(false);
+      setOriginCity("");
+      setDestinationCity("");
       setName("");
       setCode("");
+      setDistance("");
+      setTransitHours("");
+      setDefaultRate("");
+      setTollEstimate("");
       setStops("");
     } else {
       toast.error("Could not create route", { description: res.reason });
@@ -157,41 +175,32 @@ function RoutesPage() {
                     <span>Create Freight Corridor</span>
                   </DialogTitle>
                   <DialogDescription>
-                    Define standard route parameters. This corridor will be directly selectable in the booking creation dropdown.
+                    Manually enter corridor parameters. This route will be immediately visible in the booking creation dropdown.
                   </DialogDescription>
                 </DialogHeader>
 
                 <div className="grid gap-4 py-4 sm:grid-cols-2">
                   <div>
-                    <Label className="text-xs">Origin City</Label>
-                    <Select value={originCity} onValueChange={handleOriginChange}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CITIES.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs">Origin City / Hub</Label>
+                    <Input
+                      className="mt-1"
+                      placeholder="e.g. Gwalior"
+                      value={originCity}
+                      onChange={(e) => handleOriginChange(e.target.value)}
+                      required
+                      autoFocus
+                    />
                   </div>
 
                   <div>
-                    <Label className="text-xs">Destination City</Label>
-                    <Select value={destinationCity} onValueChange={handleDestinationChange}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CITIES.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs">Destination City / Hub</Label>
+                    <Input
+                      className="mt-1"
+                      placeholder="e.g. Bhopal"
+                      value={destinationCity}
+                      onChange={(e) => handleDestinationChange(e.target.value)}
+                      required
+                    />
                   </div>
 
                   <div className="sm:col-span-2">

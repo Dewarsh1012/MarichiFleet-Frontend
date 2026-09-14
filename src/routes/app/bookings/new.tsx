@@ -48,6 +48,17 @@ function NewBooking() {
   const routes = db.routes || [];
   const selectedRoute = routes.find((r) => r.id === routeId);
 
+  const availableCities = useMemo(() => {
+    const set = new Set<string>(CITIES);
+    for (const r of routes) {
+      if (r.originCity) set.add(r.originCity);
+      if (r.destinationCity) set.add(r.destinationCity);
+    }
+    if (from) set.add(from);
+    if (to) set.add(to);
+    return Array.from(set);
+  }, [routes, from, to]);
+
   // Auto-apply route from URL if present
   useEffect(() => {
     if (search?.routeId && routes.length > 0) {
@@ -184,7 +195,7 @@ function NewBooking() {
               <Select value={from} onValueChange={setFrom}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {CITIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {availableCities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </Field>
@@ -192,7 +203,7 @@ function NewBooking() {
               <Select value={to} onValueChange={setTo}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {CITIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {availableCities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </Field>

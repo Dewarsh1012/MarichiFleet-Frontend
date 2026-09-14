@@ -1,12 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, RefreshCw, Send, Truck } from "lucide-react";
+import { ArrowRight, RefreshCw, Send, Trash2, Truck } from "lucide-react";
+import { toast } from "sonner";
 import { Metric, PageHeader, Panel, StatusBadge } from "@/components/mf/primitives";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { fmtDate, fmtDateTime, inr, timeAgo, useAction, useDb } from "@/domain/hooks";
 import { bookingOrder } from "@/domain/machines";
 import { useSession } from "@/domain/session";
-import { confirmBooking, createInvoice, dispatchBooking, invoiceEligibility, setBookingStatus, tripProfit } from "@/domain/store";
+import { confirmBooking, createInvoice, deleteBooking, dispatchBooking, invoiceEligibility, setBookingStatus, tripProfit } from "@/domain/store";
 
 export const Route = createFileRoute("/app/bookings/$bookingId")({
   head: () => ({
@@ -90,6 +91,21 @@ function BookingDetail() {
                 Create invoice
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (confirm(`Are you sure you want to delete booking ${b.ref}?`)) {
+                  deleteBooking(b.id, persona.name);
+                  toast.success(`Booking ${b.ref} deleted`);
+                  navigate({ to: "/app/bookings" });
+                }
+              }}
+              className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+            >
+              <Trash2 className="size-4" />
+              Delete Booking
+            </Button>
           </div>
         }
       />

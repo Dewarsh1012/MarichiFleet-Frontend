@@ -375,6 +375,89 @@ export function deleteRoute(routeId: string, actor?: string): ActionResult {
   return { ok: true, id: routeId };
 }
 
+export function deleteVehicle(vehicleId: string, actor?: string): ActionResult {
+  const d = getDb();
+  const idx = d.vehicles.findIndex((v) => v.id === vehicleId);
+  if (idx === -1) return { ok: false, reason: "Vehicle not found." };
+  const removed = d.vehicles.splice(idx, 1)[0];
+
+  d.drivers.forEach((drv) => {
+    if (drv.assignedVehicleId === vehicleId) {
+      drv.assignedVehicleId = undefined;
+    }
+  });
+
+  audit(actor || "Fleet Manager", `Deleted vehicle ${removed.regNo}`, "vehicle", vehicleId, removed.status, undefined);
+  bump();
+
+  apiClient.delete(`/fleet/vehicles/${vehicleId}`).catch(() => {});
+  return { ok: true, id: vehicleId };
+}
+
+export function deleteDriver(driverId: string, actor?: string): ActionResult {
+  const d = getDb();
+  const idx = d.drivers.findIndex((drv) => drv.id === driverId);
+  if (idx === -1) return { ok: false, reason: "Driver not found." };
+  const removed = d.drivers.splice(idx, 1)[0];
+
+  audit(actor || "Fleet Manager", `Deleted driver ${removed.name}`, "driver", driverId, removed.status, undefined);
+  bump();
+
+  apiClient.delete(`/fleet/drivers/${driverId}`).catch(() => {});
+  return { ok: true, id: driverId };
+}
+
+export function deleteTrip(tripId: string, actor?: string): ActionResult {
+  const d = getDb();
+  const idx = d.trips.findIndex((t) => t.id === tripId);
+  if (idx === -1) return { ok: false, reason: "Trip not found." };
+  const removed = d.trips.splice(idx, 1)[0];
+
+  const vehicle = d.vehicles.find((v) => v.id === removed.vehicleId);
+  if (vehicle && vehicle.currentTripId === tripId) {
+    vehicle.currentTripId = undefined;
+    if (vehicle.status === "on_trip") vehicle.status = "available";
+  }
+
+  const driver = d.drivers.find((dr) => dr.id === removed.driverId);
+  if (driver && driver.status === "on_trip") {
+    driver.status = "available";
+  }
+
+  const booking = d.bookings.find((b) => b.tripId === tripId || b.id === removed.bookingId);
+  if (booking) {
+    booking.tripId = undefined;
+    if (booking.status === "dispatched" || booking.status === "in_transit") {
+      booking.status = "confirmed";
+    }
+  }
+
+  audit(actor || "Control Tower", `Deleted trip ${removed.ref}`, "trip", tripId, removed.status, undefined);
+  bump();
+
+  apiClient.delete(`/trips/${tripId}`).catch(() => {});
+  return { ok: true, id: tripId };
+}
+
+export function deleteBooking(bookingId: string, actor?: string): ActionResult {
+  const d = getDb();
+  const idx = d.bookings.findIndex((b) => b.id === bookingId);
+  if (idx === -1) return { ok: false, reason: "Booking not found." };
+  const removed = d.bookings.splice(idx, 1)[0];
+
+  const linkedTrip = d.trips.find((t) => t.bookingId === bookingId || t.id === removed.tripId);
+  if (linkedTrip) {
+    linkedTrip.bookingId = "";
+  }
+
+  audit(actor || "Sales / Dispatch", `Deleted booking ${removed.ref}`, "booking", bookingId, removed.status, undefined);
+  bump();
+
+  apiClient.delete(`/bookings/${bookingId}`).catch(() => {});
+  return { ok: true, id: bookingId };
+}
+
+
 export function createVehicle(input: {
   regNo: string;
   make: string;

@@ -1,6 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { CheckCircle2, Circle } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { CheckCircle2, Circle, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { FleetMap } from "@/components/mf/fleet-map";
 import { Metric, PageHeader, Panel, StatusBadge } from "@/components/mf/primitives";
 import { Amount, toMoney } from "@/components/mf/amount";
@@ -11,7 +12,7 @@ import { fmtDateTime, timeAgo, useAction, useDb } from "@/domain/hooks";
 import { useSession } from "@/domain/session";
 import { canSeeField } from "@/domain/rbac";
 import {
-  completeCheckpoint, markDelivered, reportException, resumeTrip, startTrip, tripProfit,
+  completeCheckpoint, deleteTrip, markDelivered, reportException, resumeTrip, startTrip, tripProfit,
 } from "@/domain/store";
 
 export const Route = createFileRoute("/app/trips/$tripId")({
@@ -27,6 +28,7 @@ export const Route = createFileRoute("/app/trips/$tripId")({
 function TripDetail() {
   const { tripId } = Route.useParams();
   const db = useDb();
+  const navigate = useNavigate();
   const run = useAction();
   const { persona, can } = useSession();
   const [exType, setExType] = useState("Traffic delay");
@@ -47,6 +49,14 @@ function TripDetail() {
   const pod = db.pods.find((p) => p.tripId === t.id);
   const history = db.audit.filter((a) => a.entityId === t.id);
 
+  const handleDelete = () => {
+    if (confirm(`Are you sure you want to delete trip ${t.ref}?`)) {
+      deleteTrip(t.id, persona.name);
+      toast.success(`Trip ${t.ref} deleted`);
+      navigate({ to: "/app/trips" });
+    }
+  };
+
   return (
     <>
       <PageHeader
@@ -54,7 +64,7 @@ function TripDetail() {
         breadcrumb={[{ label: "Trips", to: "/app/trips" }, { label: t.ref }]}
         subtitle={`${v.regNo} · ${d.name} · booking ${b.ref}`}
         actions={
-          <>
+          <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={t.status} />
             {can("dispatch") && t.status === "driver_accepted" && (
               <Button size="sm" onClick={() => run(() => startTrip(t.id, persona.name), "Trip started")}>Start trip</Button>
@@ -69,7 +79,16 @@ function TripDetail() {
                 Mark delivered
               </Button>
             )}
-          </>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDelete}
+              className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+            >
+              <Trash2 className="size-4" />
+              Delete Trip
+            </Button>
+          </div>
         }
       />
 
