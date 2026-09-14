@@ -1,32 +1,33 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { AuthPage } from "./auth";
 
+/*
 import { SmoothScroll } from "@/components/site/smooth-scroll";
 import { SiteNav } from "@/components/site/nav";
 import { HeroStage } from "@/components/site/hero-stage";
 import { BillingScene, ControlScene, DeliveryScene, FinalScene, MovementScene, ProblemScene } from "@/components/site/landing-scenes";
+*/
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "MarichiFleet — Every mile. Under control." },
+      { title: "Sign in — MarichiFleet" },
       {
         name: "description",
-        content:
-          "MarichiFleet is the transport operating system for road freight: booking, dispatch, live tracking, proof of delivery, invoicing and profitability on one live control tower.",
+        content: "Sign in to the MarichiFleet transport control tower, driver app or client portal.",
       },
-      { property: "og:title", content: "MarichiFleet — Every mile. Under control." },
+      { property: "og:title", content: "Sign in — MarichiFleet" },
       {
         property: "og:description",
-        content:
-          "One operating system for every vehicle, trip, driver, delivery and rupee. Booking to dispatch to POD to payment, live.",
+        content: "Access your MarichiFleet account.",
       },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      { name: "robots", content: "noindex" },
     ],
   }),
-  component: Landing,
+  component: AuthPage,
 });
 
+/*
 function Landing() {
   return (
     <div className="marketing-site">
@@ -45,3 +46,4 @@ function Landing() {
     </div>
   );
 }
+*/
