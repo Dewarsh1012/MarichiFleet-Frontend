@@ -73,6 +73,66 @@ function AuthPage() {
   const [customGoogleName, setCustomGoogleName] = useState("Dewarsh Jain");
   const [customDialogOpen, setCustomDialogOpen] = useState(false);
 
+  useEffect(() => {
+    const googleClientId =
+      (import.meta.env as Record<string, string | undefined>)["VITE_GOOGLE_CLIENT_ID"] ||
+      "116103213980-jbatdnvs5ckpbamneisc4e8g66v0jgba.apps.googleusercontent.com";
+
+    const handleGoogleCallback = async (response: any) => {
+      if (response?.credential) {
+        setGoogleLoading(true);
+        try {
+          await loginWithGoogle({ credential: response.credential });
+          await refresh();
+          toast.success("Google Sign-In Successful", { description: "User synchronized in MongoDB" });
+          navigate({ to: "/app/dashboard" });
+        } catch {
+          // toasted in loginWithGoogle
+        } finally {
+          setGoogleLoading(false);
+        }
+      }
+    };
+
+    const renderGoogleBtn = () => {
+      if ((window as any).google?.accounts?.id) {
+        try {
+          (window as any).google.accounts.id.initialize({
+            client_id: googleClientId,
+            callback: handleGoogleCallback,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          });
+
+          const el = document.getElementById("g_id_signin_btn");
+          if (el) {
+            el.innerHTML = "";
+            (window as any).google.accounts.id.renderButton(el, {
+              type: "standard",
+              theme: "outline",
+              size: "large",
+              text: "continue_with",
+              shape: "rectangular",
+              logo_alignment: "left",
+              width: 384,
+            });
+          }
+        } catch (err) {
+          console.warn("Google Auth initialization:", err);
+        }
+      }
+    };
+
+    renderGoogleBtn();
+    const interval = setInterval(() => {
+      if ((window as any).google?.accounts?.id) {
+        clearInterval(interval);
+        renderGoogleBtn();
+      }
+    }, 250);
+    return () => clearInterval(interval);
+  }, [navigate, refresh]);
+
   const google = async (customProfile?: { email: string; name: string }) => {
     try {
       setGoogleLoading(true);
@@ -201,6 +261,9 @@ function AuthPage() {
         </div>
 
         <div className="space-y-2">
+          {/* Official Google Identity Services One-Tap & Sign-In Button */}
+          <div id="g_id_signin_btn" className="w-full flex justify-center min-h-[44px]"></div>
+
           <Button
             variant="outline"
             className="w-full flex items-center justify-center gap-2 border-border/80 hover:bg-muted font-medium h-10 shadow-xs"
@@ -214,7 +277,7 @@ function AuthPage() {
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
             </svg>
-            <span>{googleLoading ? "Authenticating with Google..." : "Continue with Google"}</span>
+            <span>{googleLoading ? "Authenticating with Google..." : "Continue with Google (1-Click)"}</span>
           </Button>
 
           <Dialog open={customDialogOpen} onOpenChange={setCustomDialogOpen}>
