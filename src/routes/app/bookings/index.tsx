@@ -39,10 +39,12 @@ function Bookings() {
         rows={db.bookings}
         searchKeys={(b) => `${b.ref} ${clientName(b.clientId)} ${b.pickup.city} ${b.drop.city} ${b.cargo}`}
         chips={[
-          { id: "action", label: "Needs action", test: (b) => ["submitted", "confirmed", "pod_pending"].includes(b.status) },
+          { id: "action", label: "Needs action", test: (b) => ["submitted", "confirmed", "assigned"].includes(b.status) },
           { id: "live", label: "In transit", test: (b) => ["dispatched", "in_transit"].includes(b.status) },
+          { id: "pod", label: "POD Pending", test: (b) => b.status === "pod_pending" },
           { id: "billing", label: "Ready to bill", test: (b) => b.status === "pod_received" },
-          { id: "closed", label: "Closed", test: (b) => b.status === "closed" || b.status === "paid" },
+          { id: "invoiced", label: "Invoiced / Unsettled", test: (b) => ["invoiced", "partially_paid"].includes(b.status) },
+          { id: "closed", label: "Paid & Closed", test: (b) => b.status === "closed" || b.status === "paid" },
         ]}
         onRowClick={(b) => navigate({ to: "/app/bookings/$bookingId", params: { bookingId: b.id } })}
         emptyTitle="No bookings yet"

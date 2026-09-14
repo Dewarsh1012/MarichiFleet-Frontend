@@ -26,13 +26,36 @@ let hasSynced = false;
 export async function syncBackendData() {
   if (typeof window === "undefined") return;
   try {
-    const [remoteVehicles, remoteDrivers, remoteRoutes] = await Promise.all([
+    const [remoteVehicles, remoteDrivers, remoteRoutes, remoteBookings, remoteCustomers] = await Promise.all([
       apiClient.get<any[]>("/fleet/vehicles").catch(() => []),
       apiClient.get<any[]>("/fleet/drivers").catch(() => []),
       apiClient.get<any[]>("/routes").catch(() => []),
+      apiClient.get<any[]>("/bookings").catch(() => []),
+      apiClient.get<any[]>("/customers").catch(() => []),
     ]);
 
     const d = getDb();
+
+    if (Array.isArray(remoteCustomers) && remoteCustomers.length > 0) {
+      for (const rc of remoteCustomers) {
+        if (rc.id && !d.clients.some((c) => c.id === rc.id || c.name === rc.name)) {
+          d.clients.unshift({
+            id: rc.id,
+            tenantId: d.tenant.id,
+            name: rc.name,
+            segment: (rc.segment as any) || "Manufacturer",
+            contactName: rc.contactName || rc.name,
+            phone: rc.phone || "+91 98111 00000",
+            email: rc.email || "accounts@client.com",
+            city: rc.city || "Mumbai",
+            gstin: rc.gstin || "27AAAAA0000A1Z5",
+            creditDays: rc.creditDays || 30,
+            ratePerKm: rc.ratePerKm || 45,
+          });
+        }
+      }
+    }
+
     if (Array.isArray(remoteRoutes) && remoteRoutes.length > 0) {
       for (const rr of remoteRoutes) {
         if (rr.id && !d.routes.some((r) => r.id === rr.id || r.code === rr.code)) {
@@ -53,6 +76,7 @@ export async function syncBackendData() {
         }
       }
     }
+
     if (Array.isArray(remoteVehicles) && remoteVehicles.length > 0) {
       for (const rv of remoteVehicles) {
         const reg = (rv.regNumber || rv.regNo || "").toUpperCase();
@@ -71,6 +95,7 @@ export async function syncBackendData() {
             lat: rv.currentLocation?.latitude || 28.6139,
             lng: rv.currentLocation?.longitude || 77.2090,
             speedKph: rv.currentLocation?.speedKmH || 0,
+            serviceDueKm: 15000,
           });
         }
       }
@@ -88,11 +113,37 @@ export async function syncBackendData() {
             status: "available",
             branchId: d.branches[0]?.id || "br_01",
             rating: rd.rating || 4.8,
-            totalTrips: rd.totalTripsCompleted || 0,
+            tripsCompleted: rd.totalTripsCompleted || 0,
           });
         }
       }
     }
+
+    if (Array.isArray(remoteBookings) && remoteBookings.length > 0) {
+      for (const rb of remoteBookings) {
+        if (rb.id && !d.bookings.some((b) => b.id === rb.id || b.ref === rb.id)) {
+          d.bookings.unshift({
+            id: rb.id,
+            ref: rb.id,
+            tenantId: d.tenant.id,
+            clientId: d.clients[0]?.id || "cli_1",
+            status: (rb.status?.toLowerCase() === "confirmed" ? "confirmed" : rb.status?.toLowerCase()) || "confirmed",
+            pickup: { city: rb.pickupLocation || "Delhi NCR", address: rb.pickupLocation || "Depot", lat: 28.6139, lng: 77.2090 },
+            drop: { city: rb.deliveryLocation || "Mumbai", address: rb.deliveryLocation || "Unloading Bay", lat: 19.076, lng: 72.877 },
+            distanceKm: rb.distanceKm || 1420,
+            cargo: rb.cargo || "Industrial Goods",
+            weightTons: rb.expectedWeightTons || 22,
+            vehicleType: "Trailer",
+            priority: "standard",
+            rate: rb.quotedRate || 68000,
+            pickupISO: new Date().toISOString(),
+            createdISO: rb.createdAt || new Date().toISOString(),
+            createdBy: "System",
+          });
+        }
+      }
+    }
+
     bump();
   } catch {
     // Ignore network sync hiccup
