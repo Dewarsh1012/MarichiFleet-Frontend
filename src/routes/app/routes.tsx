@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Plus, Navigation, ArrowRight, Trash2, MapPin, Clock, IndianRupee, Layers, ExternalLink } from "lucide-react";
+import { Plus, Navigation, ArrowRight, Trash2, MapPin, Clock, IndianRupee, Layers, ExternalLink, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,10 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DataTable } from "@/components/mf/data-table";
 import { KpiCard, PageHeader, StatusBadge } from "@/components/mf/primitives";
+import { CityAutocomplete } from "@/components/mf/city-autocomplete";
 import { inr, useDb } from "@/domain/hooks";
 import { CITY_INDEX, distanceKm } from "@/domain/seed";
 import { createRoute, deleteRoute } from "@/domain/store";
 import { useSession } from "@/domain/session";
+import { getMapboxDrivingRoute, geocodeCity } from "@/services/mapbox";
 import type { TransportRoute } from "@/domain/types";
 
 export const Route = createFileRoute("/app/routes")({
@@ -35,6 +37,10 @@ function RoutesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [originCity, setOriginCity] = useState("");
   const [destinationCity, setDestinationCity] = useState("");
+  const [originCoords, setOriginCoords] = useState<[number, number] | null>(null);
+  const [destCoords, setDestCoords] = useState<[number, number] | null>(null);
+  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+  const [mapboxSummary, setMapboxSummary] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [distance, setDistance] = useState("");
@@ -45,8 +51,46 @@ function RoutesPage() {
 
   const routes = db.routes || [];
 
-  const handleOriginChange = (orig: string) => {
+  const calculateMapboxRoute = async (
+    origName: string,
+    destName: string,
+    oCoords?: [number, number] | null,
+    dCoords?: [number, number] | null
+  ) => {
+    if (!origName || !destName || origName.trim().length < 2 || destName.trim().length < 2) {
+      setMapboxSummary(null);
+      return;
+    }
+
+    setIsCalculatingRoute(true);
+    try {
+      const start = oCoords || (await geocodeCity(origName));
+      const end = dCoords || (await geocodeCity(destName));
+
+      if (!start || !end) {
+        setIsCalculatingRoute(false);
+        return;
+      }
+
+      const res = await getMapboxDrivingRoute([start, end]);
+      if (res && res.distanceKm > 0) {
+        setDistance(String(Math.round(res.distanceKm)));
+        setTransitHours(String(res.durationHours));
+        setDefaultRate((prev) => (!prev || Number(prev) <= 0 ? String(Math.round(res.distanceKm * 52)) : prev));
+        setTollEstimate((prev) => (!prev || Number(prev) <= 0 ? String(Math.round(res.distanceKm * 3.8)) : prev));
+        const roadsText = res.summaryRoads && res.summaryRoads.length > 0 ? ` (via ${res.summaryRoads.slice(0, 3).join(", ")})` : "";
+        setMapboxSummary(`${res.distanceKm} km · ${res.durationHours} hrs${roadsText}`);
+      }
+    } catch (e) {
+      console.warn("Could not calculate Mapbox route:", e);
+    } finally {
+      setIsCalculatingRoute(false);
+    }
+  };
+
+  const handleOriginChange = (orig: string, coords?: [number, number]) => {
     setOriginCity(orig);
+    if (coords) setOriginCoords(coords);
     if (!name || name.includes("→")) {
       setName(orig && destinationCity ? `${orig} → ${destinationCity} Corridor` : "");
     }
@@ -55,10 +99,14 @@ function RoutesPage() {
       const d = destinationCity.slice(0, 3).toUpperCase();
       setCode(o && d ? `RT-${o}-${d}` : "");
     }
+    if (orig && destinationCity) {
+      calculateMapboxRoute(orig, destinationCity, coords || originCoords, destCoords);
+    }
   };
 
-  const handleDestinationChange = (dest: string) => {
+  const handleDestinationChange = (dest: string, coords?: [number, number]) => {
     setDestinationCity(dest);
+    if (coords) setDestCoords(coords);
     if (!name || name.includes("→")) {
       setName(originCity && dest ? `${originCity} → ${dest} Corridor` : "");
     }
@@ -66,6 +114,9 @@ function RoutesPage() {
       const o = originCity.slice(0, 3).toUpperCase();
       const d = dest.slice(0, 3).toUpperCase();
       setCode(o && d ? `RT-${o}-${d}` : "");
+    }
+    if (originCity && dest) {
+      calculateMapboxRoute(originCity, dest, originCoords, coords || destCoords);
     }
   };
 
@@ -189,25 +240,48 @@ function RoutesPage() {
                 <div className="grid gap-4 py-4 sm:grid-cols-2">
                   <div>
                     <Label className="text-xs">Origin City / Hub</Label>
-                    <Input
-                      className="mt-1"
-                      placeholder="e.g. Gwalior"
-                      value={originCity}
-                      onChange={(e) => handleOriginChange(e.target.value)}
-                      required
-                      autoFocus
-                    />
+                    <div className="mt-1">
+                      <CityAutocomplete
+                        placeholder="Type city (e.g. Gwalior)"
+                        value={originCity}
+                        onChange={(val, coords) => handleOriginChange(val, coords)}
+                        required
+                        autoFocus
+                      />
+                    </div>
                   </div>
 
                   <div>
                     <Label className="text-xs">Destination City / Hub</Label>
-                    <Input
-                      className="mt-1"
-                      placeholder="e.g. Bhopal"
-                      value={destinationCity}
-                      onChange={(e) => handleDestinationChange(e.target.value)}
-                      required
-                    />
+                    <div className="mt-1">
+                      <CityAutocomplete
+                        placeholder="Type city (e.g. Bhopal)"
+                        value={destinationCity}
+                        onChange={(val, coords) => handleDestinationChange(val, coords)}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Mapbox Route Calculation Status Ribbon */}
+                  <div className="sm:col-span-2">
+                    {isCalculatingRoute ? (
+                      <div className="flex items-center gap-2 text-xs text-primary bg-primary/10 border border-primary/20 px-3 py-2 rounded-md animate-pulse">
+                        <Loader2 className="size-3.5 animate-spin" />
+                        <span>Calculating accurate highway distance & transit time via Mapbox Directions API...</span>
+                      </div>
+                    ) : mapboxSummary ? (
+                      <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <Navigation className="size-3.5 text-emerald-500 shrink-0" />
+                          <span className="font-semibold">Mapbox Highway Route:</span>
+                          <span>{mapboxSummary}</span>
+                        </div>
+                        <span className="text-[10px] font-mono uppercase tracking-wider bg-emerald-500/20 px-1.5 py-0.5 rounded text-emerald-600 dark:text-emerald-300 shrink-0">
+                          Auto-Calculated
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="sm:col-span-2">
