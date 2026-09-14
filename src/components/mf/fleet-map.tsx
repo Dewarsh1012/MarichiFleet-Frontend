@@ -111,14 +111,19 @@ export function FleetMap({
 
   // 1.1 Handle dynamic resize (e.g. Map Focus layout switch)
   useEffect(() => {
-    if (!mapContainerRef.current) return;
-    const ro = new ResizeObserver(() => {
-      if (mapRef.current) {
-        mapRef.current.resize();
-      }
-    });
-    ro.observe(mapContainerRef.current);
-    return () => ro.disconnect();
+    if (!mapContainerRef.current || typeof ResizeObserver === "undefined") return;
+    let ro: ResizeObserver | null = null;
+    try {
+      ro = new ResizeObserver(() => {
+        if (mapRef.current) {
+          mapRef.current.resize();
+        }
+      });
+      ro.observe(mapContainerRef.current);
+    } catch (e) {
+      console.warn("ResizeObserver unavailable (fingerprinting protection?):", e);
+    }
+    return () => ro?.disconnect();
   }, [mapLoaded]);
 
   // 2. Handle Map Style Switch
