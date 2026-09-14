@@ -12,6 +12,7 @@ import type {
   NotificationEvent,
   Place,
   Role,
+  TransportRoute,
   Trip,
   Vehicle,
 } from "./types";
@@ -25,12 +26,33 @@ let hasSynced = false;
 export async function syncBackendData() {
   if (typeof window === "undefined") return;
   try {
-    const [remoteVehicles, remoteDrivers] = await Promise.all([
+    const [remoteVehicles, remoteDrivers, remoteRoutes] = await Promise.all([
       apiClient.get<any[]>("/fleet/vehicles").catch(() => []),
       apiClient.get<any[]>("/fleet/drivers").catch(() => []),
+      apiClient.get<any[]>("/routes").catch(() => []),
     ]);
 
     const d = getDb();
+    if (Array.isArray(remoteRoutes) && remoteRoutes.length > 0) {
+      for (const rr of remoteRoutes) {
+        if (rr.id && !d.routes.some((r) => r.id === rr.id || r.code === rr.code)) {
+          d.routes.unshift({
+            id: rr.id,
+            name: rr.name,
+            code: rr.code,
+            originCity: rr.originCity,
+            destinationCity: rr.destinationCity,
+            distanceKm: rr.distanceKm,
+            estTransitHours: rr.estTransitHours || 12,
+            defaultRate: rr.defaultRate || 30000,
+            tollEstimate: rr.tollEstimate || 1500,
+            stops: rr.stops || [],
+            status: rr.status || "active",
+            createdAtISO: rr.createdAt || new Date().toISOString(),
+          });
+        }
+      }
+    }
     if (Array.isArray(remoteVehicles) && remoteVehicles.length > 0) {
       for (const rv of remoteVehicles) {
         const reg = (rv.regNumber || rv.regNo || "").toUpperCase();
@@ -233,6 +255,7 @@ export function createBooking(input: {
   actor: string;
   source: string;
   submit: boolean;
+  routeId?: string;
 }): ActionResult {
   const d = getDb();
   const client = byId(d.clients, input.clientId);
@@ -262,6 +285,7 @@ export function createBooking(input: {
     pickupISO: input.pickupISO,
     createdISO: now(),
     createdBy: input.source,
+    routeId: input.routeId,
   };
   d.bookings.unshift(booking);
   audit(input.actor, "Created booking", "booking", id, undefined, labelize(booking.status));
@@ -275,6 +299,80 @@ export function createBooking(input: {
     entityRef: ref,
   });
   return { ok: true, id };
+}
+
+export function createRoute(input: {
+  name?: string;
+  code?: string;
+  originCity: string;
+  destinationCity: string;
+  distanceKm: number;
+  estTransitHours?: number;
+  defaultRate?: number;
+  tollEstimate?: number;
+  stops?: string[];
+  actor?: string;
+}): ActionResult {
+  const d = getDb();
+  if (!d.routes) d.routes = [];
+
+  const origin = input.originCity?.trim();
+  const dest = input.destinationCity?.trim();
+  if (!origin || !dest) {
+    return { ok: false, reason: "Origin and destination cities are required." };
+  }
+  if (origin.toLowerCase() === dest.toLowerCase()) {
+    return { ok: false, reason: "Origin and destination cities must be different." };
+  }
+  if (!input.distanceKm || input.distanceKm <= 0) {
+    return { ok: false, reason: "Valid corridor distance in km is required." };
+  }
+
+  const id = nid("rt");
+  const code =
+    input.code?.trim().toUpperCase() ||
+    `RT-${origin.slice(0, 3).toUpperCase()}-${dest.slice(0, 3).toUpperCase()}`;
+
+  const name = input.name?.trim() || `${origin} → ${dest} Corridor`;
+
+  const newRoute: TransportRoute = {
+    id,
+    name,
+    code,
+    originCity: origin,
+    destinationCity: dest,
+    distanceKm: Number(input.distanceKm),
+    estTransitHours: Number(input.estTransitHours) || Math.round((Number(input.distanceKm) / 40) * 10) / 10,
+    defaultRate: Number(input.defaultRate) || Math.round(Number(input.distanceKm) * 48),
+    tollEstimate: Number(input.tollEstimate) || Math.round(Number(input.distanceKm) * 3),
+    stops: input.stops || [],
+    status: "active",
+    createdAtISO: now(),
+  };
+
+  d.routes.unshift(newRoute);
+  audit(input.actor || "Operations", "Created transport route", "route", id, undefined, newRoute.code);
+  bump();
+
+  // Async persist to MongoDB backend if online
+  apiClient.post("/routes", newRoute).catch(() => {});
+
+  return { ok: true, id };
+}
+
+export function deleteRoute(routeId: string, actor?: string): ActionResult {
+  const d = getDb();
+  if (!d.routes) d.routes = [];
+  const idx = d.routes.findIndex((r) => r.id === routeId);
+  if (idx === -1) return { ok: false, reason: "Route not found." };
+  const removed = d.routes.splice(idx, 1)[0];
+  audit(actor || "Operations", "Deleted transport route", "route", routeId, removed.code, undefined);
+  bump();
+
+  // Async delete from backend
+  apiClient.delete(`/routes/${routeId}`).catch(() => {});
+
+  return { ok: true, id: routeId };
 }
 
 export function createVehicle(input: {
