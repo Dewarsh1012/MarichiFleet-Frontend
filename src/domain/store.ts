@@ -162,6 +162,49 @@ export function clientName(id: string) {
   return getDb().clients.find((c) => c.id === id)?.name ?? "Unknown client";
 }
 
+export function addClient(
+  input: Omit<Client, "id" | "tenantId"> & { tenantId?: string },
+  actor: string
+): ActionResult {
+  const d = getDb();
+  const id = nid("cli");
+  const client: Client = {
+    id,
+    tenantId: input.tenantId || d.tenant.id || "tenant_delhi_01",
+    name: input.name,
+    segment: input.segment,
+    contactName: input.contactName,
+    phone: input.phone,
+    email: input.email,
+    city: input.city,
+    gstin: input.gstin || "07AAAAA0000A1Z5",
+    creditDays: input.creditDays || 30,
+    ratePerKm: input.ratePerKm || 45,
+  };
+  d.clients.unshift(client);
+  audit(actor, `Client ${client.name} onboarded`, "client", id);
+  return { ok: true, id };
+}
+
+export function updateClient(id: string, updates: Partial<Client>, actor: string): ActionResult {
+  const d = getDb();
+  const client = byId(d.clients, id);
+  if (!client) return { ok: false, reason: "Client not found" };
+  Object.assign(client, updates);
+  audit(actor, `Client ${client.name} updated`, "client", id);
+  return { ok: true, id };
+}
+
+export function deleteClient(id: string, actor: string): ActionResult {
+  const d = getDb();
+  const idx = d.clients.findIndex((c) => c.id === id);
+  if (idx < 0) return { ok: false, reason: "Client not found" };
+  const name = d.clients[idx].name;
+  d.clients.splice(idx, 1);
+  audit(actor, `Client ${name} deleted`, "client", id);
+  return { ok: true };
+}
+
 export function tripProfit(t: Trip) {
   return t.revenue - t.fuelCost - t.tollCost - t.driverCost;
 }

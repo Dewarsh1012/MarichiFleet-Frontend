@@ -87,6 +87,8 @@ export function FleetMap({
 
       map.on("load", () => {
         setMapLoaded(true);
+        // Ensure immediate full render
+        setTimeout(() => map.resize(), 100);
       });
 
       map.on("error", (e) => {
@@ -106,6 +108,18 @@ export function FleetMap({
       }
     };
   }, []);
+
+  // 1.1 Handle dynamic resize (e.g. Map Focus layout switch)
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+    const ro = new ResizeObserver(() => {
+      if (mapRef.current) {
+        mapRef.current.resize();
+      }
+    });
+    ro.observe(mapContainerRef.current);
+    return () => ro.disconnect();
+  }, [mapLoaded]);
 
   // 2. Handle Map Style Switch
   const switchStyle = (newStyle: "dark" | "streets" | "satellite") => {
