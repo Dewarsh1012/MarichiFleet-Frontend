@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, useSearch, Link } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Navigation, ExternalLink, Sparkles, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, Panel } from "@/components/mf/primitives";
