@@ -1,13 +1,24 @@
 function resolveApiBase(): string {
-  const envUrl = (import.meta.env as Record<string, string | undefined>)["VITE_API_URL"] || '';
-  if (!envUrl) {
-    return 'http://localhost:4000/api';
+  const raw = (import.meta.env as Record<string, string | undefined>)["VITE_API_URL"] || '';
+  // Extract clean http(s) URL if present
+  const httpMatch = raw.match(/https?:\/\/[^\s"'<>\n]+/i);
+  let base = httpMatch ? httpMatch[0] : raw.replace(/["']/g, '').trim();
+
+  if (!base) {
+    // Default to production Render backend in browser / deployed environments, or localhost in pure dev
+    return typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+      ? 'https://marichifleet-backend.onrender.com/api'
+      : 'http://localhost:4000/api';
   }
-  let clean = envUrl.trim().replace(/\/+$/, '');
-  if (!clean.endsWith('/api')) {
-    clean = `${clean}/api`;
+
+  // Remove trailing slashes
+  base = base.replace(/\/+$/, '');
+
+  // Strip duplicate /api if already exists
+  if (base.endsWith('/api')) {
+    return base;
   }
-  return clean;
+  return `${base}/api`;
 }
 
 export const API_BASE = resolveApiBase();
@@ -59,8 +70,13 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 export async function request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = cleanEndpoint.startsWith('http') ? cleanEndpoint : `${API_BASE}${cleanEndpoint}`;
+  let url: string;
+  if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
+    url = endpoint;
+  } else {
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    url = `${API_BASE}${cleanEndpoint}`;
+  }
 
   const headers = {
     ...getAuthHeaders(),

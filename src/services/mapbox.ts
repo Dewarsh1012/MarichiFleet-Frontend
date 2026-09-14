@@ -89,7 +89,7 @@ export async function geocodeCity(cityName: string): Promise<[number, number] | 
     if (suggestions.length > 0) {
       return suggestions[0].center;
     }
-  } catch {}
+  } catch { }
 
   return null;
 }

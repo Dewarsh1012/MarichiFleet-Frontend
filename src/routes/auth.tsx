@@ -73,10 +73,15 @@ function AuthPage() {
   const [customGoogleName, setCustomGoogleName] = useState("Dewarsh Jain");
   const [customDialogOpen, setCustomDialogOpen] = useState(false);
 
+  const hasInitializedGoogleRef = useRef(false);
+
   useEffect(() => {
-    const googleClientId =
-      (import.meta.env as Record<string, string | undefined>)["VITE_GOOGLE_CLIENT_ID"] ||
-      "116103213980-jbatdnvs5ckpbamneisc4e8g66v0jgba.apps.googleusercontent.com";
+    const rawId = (import.meta.env as Record<string, string | undefined>)["VITE_GOOGLE_CLIENT_ID"] || "";
+    const matchId = rawId.match(/\d+-[a-z0-9_]+\.apps\.googleusercontent\.com/i);
+    const googleClientId = matchId
+      ? matchId[0]
+      : rawId.replace(/["']/g, "").trim() ||
+        "116103213980-jbatdnvs5ckpbamneisc4e8g66v0jgba.apps.googleusercontent.com";
 
     const handleGoogleCallback = async (response: any) => {
       if (response?.credential) {
@@ -97,16 +102,18 @@ function AuthPage() {
     const renderGoogleBtn = () => {
       if ((window as any).google?.accounts?.id) {
         try {
-          (window as any).google.accounts.id.initialize({
-            client_id: googleClientId,
-            callback: handleGoogleCallback,
-            auto_select: false,
-            cancel_on_tap_outside: true,
-          });
+          if (!hasInitializedGoogleRef.current) {
+            (window as any).google.accounts.id.initialize({
+              client_id: googleClientId,
+              callback: handleGoogleCallback,
+              auto_select: false,
+              cancel_on_tap_outside: true,
+            });
+            hasInitializedGoogleRef.current = true;
+          }
 
           const el = document.getElementById("g_id_signin_btn");
-          if (el) {
-            el.innerHTML = "";
+          if (el && el.childElementCount === 0) {
             (window as any).google.accounts.id.renderButton(el, {
               type: "standard",
               theme: "outline",

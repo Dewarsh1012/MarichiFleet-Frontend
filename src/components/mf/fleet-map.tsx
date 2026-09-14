@@ -151,11 +151,10 @@ export function FleetMap({
 
         el.innerHTML = `
           <div class="relative flex items-center justify-center">
-            ${
-              active
-                ? `<div class="absolute -inset-2 rounded-full animate-ping opacity-75" style="background-color: ${colour}"></div>`
-                : ""
-            }
+            ${active
+            ? `<div class="absolute -inset-2 rounded-full animate-ping opacity-75" style="background-color: ${colour}"></div>`
+            : ""
+          }
             <div class="relative flex size-6 items-center justify-center rounded-full border-2 border-white/90 shadow-md transition-transform duration-200 group-hover:scale-125" style="background-color: ${colour}">
               <div class="size-2 rounded-full bg-white"></div>
             </div>
